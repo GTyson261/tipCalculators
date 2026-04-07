@@ -4,37 +4,62 @@ const STORAGE_KEY = "arcadeYoutubeQueue";
 const INDEX_KEY = "arcadeYoutubeCurrentIndex";
 const VOLUME_KEY = "arcadeYoutubeVolume";
 
-function getVideoId(url) {
-  if (!url) return "";
+function extractVideoId(input) {
+  if (!input || typeof input !== "string") return "";
+
+  const text = input.trim();
+
+  if (/^[a-zA-Z0-9_-]{11}$/.test(text)) {
+    return text;
+  }
 
   try {
-    const parsed = new URL(url);
+    const url = new URL(text);
+    const host = url.hostname.replace(/^www\./, "");
 
-    if (parsed.hostname.includes("youtu.be")) {
-      return parsed.pathname.replace("/", "").trim();
+    if (host === "youtu.be") {
+      const id = url.pathname.replace("/", "").trim();
+      return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : "";
     }
 
-    if (parsed.hostname.includes("youtube.com")) {
-      return (parsed.searchParams.get("v") || "").trim();
-    }
+    if (host === "youtube.com" || host === "m.youtube.com") {
+      const v = (url.searchParams.get("v") || "").trim();
+      if (/^[a-zA-Z0-9_-]{11}$/.test(v)) return v;
 
-    return "";
+      const pathParts = url.pathname.split("/").filter(Boolean);
+
+      if (pathParts[0] === "embed" && /^[a-zA-Z0-9_-]{11}$/.test(pathParts[1] || "")) {
+        return pathParts[1];
+      }
+
+      if (pathParts[0] === "shorts" && /^[a-zA-Z0-9_-]{11}$/.test(pathParts[1] || "")) {
+        return pathParts[1];
+      }
+    }
   } catch {
-    return "";
+    const match = text.match(
+      /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+    );
+    if (match) return match[1];
   }
+
+  return "";
 }
 
 function isValidVideoId(id) {
-  return typeof id === "string" && /^[a-zA-Z0-9_-]{11}$/.test(id.trim());
+  return /^[a-zA-Z0-9_-]{11}$/.test((id || "").trim());
 }
 
-function isValidYouTubeUrl(url) {
-  return isValidVideoId(getVideoId(url));
+function normalizeQueueItem(value) {
+  const id = extractVideoId(value);
+  return isValidVideoId(id) ? id : "";
 }
 
 function sanitizeQueue(queue) {
   if (!Array.isArray(queue)) return [];
-  return queue.filter((item) => typeof item === "string" && isValidYouTubeUrl(item));
+  return queue
+    .map((item) => normalizeQueueItem(item))
+    .filter(Boolean);
 }
 
 function loadYouTubeAPI() {
@@ -66,8 +91,7 @@ function readStoredQueue() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return sanitizeQueue(parsed);
+    return sanitizeQueue(JSON.parse(raw));
   } catch {
     return [];
   }
@@ -75,9 +99,8 @@ function readStoredQueue() {
 
 function readStoredIndex() {
   try {
-    const raw = localStorage.getItem(INDEX_KEY);
-    const parsed = Number(raw);
-    return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
+    const raw = Number(localStorage.getItem(INDEX_KEY));
+    return Number.isInteger(raw) && raw >= 0 ? raw : 0;
   } catch {
     return 0;
   }
@@ -85,9 +108,8 @@ function readStoredIndex() {
 
 function readStoredVolume() {
   try {
-    const raw = localStorage.getItem(VOLUME_KEY);
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? Math.min(100, Math.max(0, parsed)) : 50;
+    const raw = Number(localStorage.getItem(VOLUME_KEY));
+    return Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) : 50;
   } catch {
     return 50;
   }
@@ -95,7 +117,7 @@ function readStoredVolume() {
 
 function YouTubeQueuePlayer() {
   const playerRef = useRef(null);
-  const playerContainerRef = useRef(null);
+  const playerShellRef = useRef(null);
   const draggedIndexRef = useRef(null);
 
   const [input, setInput] = useState("");
@@ -103,31 +125,28 @@ function YouTubeQueuePlayer() {
   const [currentIndex, setCurrentIndex] = useState(readStoredIndex);
   const [volume, setVolume] = useState(readStoredVolume);
   const [apiReady, setApiReady] = useState(false);
-  const [playerError, setPlayerError] = useState("");
+  const [message, setMessage] = useState("");
 
   const safeQueue = useMemo(() => sanitizeQueue(queue), [queue]);
 
   const safeCurrentIndex =
     safeQueue.length === 0 ? 0 : Math.min(currentIndex, safeQueue.length - 1);
 
-  const currentVideoId = useMemo(() => {
-    const currentUrl = safeQueue[safeCurrentIndex] || "";
-    const id = getVideoId(currentUrl);
-    return isValidVideoId(id) ? id : "";
-  }, [safeQueue, safeCurrentIndex]);
+  const currentVideoId = safeQueue[safeCurrentIndex] || "";
 
   useEffect(() => {
     let mounted = true;
 
     loadYouTubeAPI().then(() => {
-      if (!mounted) return;
-      setApiReady(true);
+      if (mounted) setApiReady(true);
     });
 
     return () => {
       mounted = false;
-      if (playerRef.current?.destroy) {
-        playerRef.current.destroy();
+      try {
+        playerRef.current?.destroy?.();
+      } catch {
+        // ignore
       }
     };
   }, []);
@@ -151,129 +170,116 @@ function YouTubeQueuePlayer() {
   }, [volume]);
 
   useEffect(() => {
+    if (safeQueue.length === 0 && currentIndex !== 0) {
+      setCurrentIndex(0);
+      return;
+    }
+
     if (safeQueue.length > 0 && currentIndex > safeQueue.length - 1) {
       setCurrentIndex(safeQueue.length - 1);
     }
   }, [safeQueue, currentIndex]);
 
   useEffect(() => {
-    if (safeQueue.length === 0 && currentIndex !== 0) {
-      setCurrentIndex(0);
-    }
-  }, [safeQueue.length, currentIndex]);
+    if (!apiReady || !playerShellRef.current || playerRef.current) return;
 
-  useEffect(() => {
-    if (!apiReady || !playerContainerRef.current) return;
+    playerRef.current = new window.YT.Player(playerShellRef.current, {
+      height: "220",
+      width: "100%",
+      playerVars: {
+        playsinline: 1,
+        rel: 0,
+      },
+      events: {
+        onReady: (event) => {
+          setMessage("");
+          try {
+            event.target.setVolume(volume);
 
-    if (!playerRef.current) {
-      playerRef.current = new window.YT.Player(playerContainerRef.current, {
-        height: "220",
-        width: "100%",
-        videoId: currentVideoId || undefined,
-        playerVars: {
-          playsinline: 1,
-          rel: 0,
-        },
-        events: {
-          onReady: (event) => {
-            try {
-              setPlayerError("");
-              event.target.setVolume(volume);
-
-              if (currentVideoId) {
-                event.target.loadVideoById(currentVideoId);
-              }
-            } catch (error) {
-              console.error("YouTube player onReady error:", error);
-              setPlayerError("Could not load the current video.");
-              event.target.stopVideo?.();
+            if (isValidVideoId(currentVideoId)) {
+              event.target.loadVideoById(currentVideoId);
             }
-          },
-          onStateChange: (event) => {
-            if (event.data === window.YT.PlayerState.ENDED) {
-              handleSkip();
-            }
-          },
-          onError: () => {
-            setPlayerError("This video could not be played. It may be invalid or unavailable.");
-            removeCurrentVideo();
-          },
+          } catch {
+            setMessage("Could not load the current video.");
+          }
         },
-      });
-    }
+        onStateChange: (event) => {
+          if (event.data === window.YT.PlayerState.ENDED) {
+            handleSkip();
+          }
+        },
+        onError: () => {
+          setMessage("That video could not be played, so it was removed.");
+          removeCurrentVideo();
+        },
+      },
+    });
   }, [apiReady, currentVideoId, volume]);
 
   useEffect(() => {
     if (!playerRef.current) return;
 
     try {
-      setPlayerError("");
+      playerRef.current.setVolume(volume);
 
-      if (currentVideoId) {
+      if (isValidVideoId(currentVideoId)) {
+        setMessage("");
         playerRef.current.loadVideoById(currentVideoId);
-        playerRef.current.setVolume(volume);
       } else {
-        playerRef.current.stopVideo();
+        playerRef.current.stopVideo?.();
       }
-    } catch (error) {
-      console.error("YouTube load error:", error);
-      setPlayerError("Could not load the current video.");
-      playerRef.current.stopVideo?.();
+    } catch {
+      setMessage("Could not load the current video.");
       removeCurrentVideo();
     }
   }, [currentVideoId, volume]);
 
   function addToQueue() {
-    const cleaned = input.trim();
+    const id = extractVideoId(input);
 
-    if (!isValidYouTubeUrl(cleaned)) {
-      alert("Please enter a valid YouTube link.");
+    if (!isValidVideoId(id)) {
+      setMessage("Please paste a valid YouTube link or video ID.");
       return;
     }
 
-    setQueue((prev) => {
-      const next = [...sanitizeQueue(prev), cleaned];
-      if (prev.length === 0) {
-        setCurrentIndex(0);
-      }
-      return next;
-    });
-
-    setPlayerError("");
+    setQueue((prev) => [...sanitizeQueue(prev), id]);
     setInput("");
+    setMessage("");
   }
 
   function handlePlay() {
     try {
-      if (!currentVideoId) return;
-      playerRef.current?.playVideo();
-    } catch (error) {
-      console.error("Play error:", error);
-      setPlayerError("Could not play this video.");
+      if (!isValidVideoId(currentVideoId)) {
+        setMessage("Add a valid video first.");
+        return;
+      }
+      playerRef.current?.playVideo?.();
+    } catch {
+      setMessage("Could not play this video.");
     }
   }
 
   function handlePause() {
     try {
-      playerRef.current?.pauseVideo();
-    } catch (error) {
-      console.error("Pause error:", error);
+      playerRef.current?.pauseVideo?.();
+    } catch {
+      // ignore
     }
   }
 
   function handleMute() {
     try {
-      playerRef.current?.mute();
-    } catch (error) {
-      console.error("Mute error:", error);
+      playerRef.current?.mute?.();
+    } catch {
+      // ignore
     }
   }
 
   function handleUnmute() {
     try {
-      playerRef.current?.unMute();
-    } catch (error) {
-      console.error("Unmute error:", error);
+      playerRef.current?.unMute?.();
+    } catch {
+      // ignore
     }
   }
 
@@ -284,8 +290,8 @@ function YouTubeQueuePlayer() {
 
   function handlePick(index) {
     if (!safeQueue[index]) return;
-    setPlayerError("");
     setCurrentIndex(index);
+    setMessage("");
   }
 
   function removeSong(index) {
@@ -294,16 +300,19 @@ function YouTubeQueuePlayer() {
 
       if (next.length === 0) {
         setCurrentIndex(0);
-        setPlayerError("");
-        playerRef.current?.stopVideo?.();
+        setMessage("");
+        try {
+          playerRef.current?.stopVideo?.();
+        } catch {
+          // ignore
+        }
         return [];
       }
 
       if (index < safeCurrentIndex) {
         setCurrentIndex((prevIndex) => Math.max(0, prevIndex - 1));
       } else if (index === safeCurrentIndex) {
-        const newIndex = index >= next.length ? 0 : index;
-        setCurrentIndex(newIndex);
+        setCurrentIndex(index >= next.length ? 0 : index);
       }
 
       return next;
@@ -319,7 +328,7 @@ function YouTubeQueuePlayer() {
     setQueue([]);
     setCurrentIndex(0);
     setInput("");
-    setPlayerError("");
+    setMessage("");
     try {
       playerRef.current?.stopVideo?.();
     } catch {
@@ -361,7 +370,7 @@ function YouTubeQueuePlayer() {
       <div className="yt-input-row">
         <input
           type="text"
-          placeholder="Paste YouTube link"
+          placeholder="Paste YouTube link or ID"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onPaste={(e) => {
@@ -369,14 +378,13 @@ function YouTubeQueuePlayer() {
             if (pasted) {
               e.preventDefault();
               setInput(pasted.trim());
-              setPlayerError("");
+              setMessage("");
             }
           }}
           onClick={(e) => e.stopPropagation()}
           onFocus={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
             e.stopPropagation();
-
             if (e.key === "Enter") {
               addToQueue();
             }
@@ -395,10 +403,10 @@ function YouTubeQueuePlayer() {
               const text = await navigator.clipboard.readText();
               if (text) {
                 setInput(text.trim());
-                setPlayerError("");
+                setMessage("");
               }
             } catch {
-              alert("Clipboard paste was blocked. Try Command+V in the input.");
+              setMessage("Clipboard access was blocked. Click the input and use Command+V.");
             }
           }}
         >
@@ -410,11 +418,11 @@ function YouTubeQueuePlayer() {
         </button>
       </div>
 
-      {playerError && <div className="yt-empty">{playerError}</div>}
+      {message && <div className="yt-empty">{message}</div>}
 
       <div className="yt-player-wrap">
         {apiReady ? (
-          <div ref={playerContainerRef} className="yt-iframe-shell" />
+          <div ref={playerShellRef} className="yt-iframe-shell" />
         ) : (
           <div className="yt-empty">Loading YouTube player...</div>
         )}
@@ -454,9 +462,9 @@ function YouTubeQueuePlayer() {
         {safeQueue.length === 0 ? (
           <p className="yt-queue-empty">Queue is empty</p>
         ) : (
-          safeQueue.map((url, index) => (
+          safeQueue.map((videoId, index) => (
             <div
-              key={`${url}-${index}`}
+              key={`${videoId}-${index}`}
               className={`yt-queue-row ${
                 index === safeCurrentIndex ? "yt-queue-item-active" : ""
               }`}
@@ -469,7 +477,7 @@ function YouTubeQueuePlayer() {
                 className="yt-queue-item"
                 onClick={() => handlePick(index)}
               >
-                {index + 1}. {url}
+                {index + 1}. {videoId}
               </button>
 
               <button

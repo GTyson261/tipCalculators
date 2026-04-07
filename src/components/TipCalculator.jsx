@@ -10,7 +10,8 @@ function TipCalculator({ currentGame = "galaxy" }) {
 
   const parsedBill = Math.max(0, Number(bill) || 0);
   const parsedPeople = Math.max(1, Number(people) || 1);
-  const activeTip = customTip !== "" ? Math.max(0, Number(customTip) || 0) : tipPercent;
+  const activeTip =
+    customTip !== "" ? Math.max(0, Number(customTip) || 0) : tipPercent;
 
   const { tipAmount, totalAmount, perPerson } = useMemo(() => {
     const tip = parsedBill * (activeTip / 100);
@@ -132,7 +133,8 @@ function TipCalculator({ currentGame = "galaxy" }) {
             </div>
 
             <div className="tip-mini-note">
-              Bill: ${parsedBill.toFixed(2)} · Tip: {activeTip}% · People: {parsedPeople}
+              Bill: ${parsedBill.toFixed(2)} · Tip: {activeTip}% · People:{" "}
+              {parsedPeople}
             </div>
           </div>
         </div>
