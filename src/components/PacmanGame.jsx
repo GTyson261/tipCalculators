@@ -229,37 +229,25 @@ function PacmanGame({ onScoreChange, onGameOver }) {
         const candidate = nextPos(prevPlayer, newDir);
         const nextPlayer = isWall(candidate.x, candidate.y) ? prevPlayer : candidate;
 
-        setPellets((prevPellets) => {
-          const updated = prevPellets.map((row) => [...row]);
-          const cell = updated[nextPlayer.y][nextPlayer.x];
+        const nextCell = pellets[nextPlayer.y][nextPlayer.x];
 
-          if (cell === ".") {
+        if (nextCell === ".") {
+          setPellets((prevPellets) => {
+            const updated = prevPellets.map((row) => [...row]);
             updated[nextPlayer.y][nextPlayer.x] = "";
-            setScore((s) => s + 10);
-          } else if (cell === "o") {
+            return updated;
+          });
+          setScore((s) => s + 10);
+        } else if (nextCell === "o") {
+          setPellets((prevPellets) => {
+            const updated = prevPellets.map((row) => [...row]);
             updated[nextPlayer.y][nextPlayer.x] = "";
-            setScore((s) => s + 50);
-            setPowered(true);
-            setPowerTimer(50);
-          }
-
-          const remaining = updated.flat().filter((c) => c === "." || c === "o").length;
-          if (remaining > 0 && remaining % 25 === 0 && !fruit) {
-            const spawn = FRUIT_SPAWNS[(level + remaining) % FRUIT_SPAWNS.length];
-            setFruit({
-              x: spawn.x,
-              y: spawn.y,
-              value: 100 + level * 25,
-            });
-          }
-
-          if (remaining === 0) {
-            nextLevel();
-            return buildPellets();
-          }
-
-          return updated;
-        });
+            return updated;
+          });
+          setScore((s) => s + 50);
+          setPowered(true);
+          setPowerTimer(50);
+        }
 
         setFruit((prevFruit) => {
           if (prevFruit && prevFruit.x === nextPlayer.x && prevFruit.y === nextPlayer.y) {
@@ -320,20 +308,37 @@ function PacmanGame({ onScoreChange, onGameOver }) {
 
       setFruit((prevFruit) => {
         if (!prevFruit) return prevFruit;
+
+        const nextTtl = (prevFruit.ttl || 60) - 1;
+        if (nextTtl <= 0) return null;
+
         return {
           ...prevFruit,
-          ttl: (prevFruit.ttl || 60) - 1,
-        }.ttl <= 0
-          ? null
-          : {
-              ...prevFruit,
-              ttl: (prevFruit.ttl || 60) - 1,
-            };
+          ttl: nextTtl,
+        };
       });
     }, speed);
 
     return () => clearInterval(interval);
-  }, [started, gameOver, direction, pendingDirection, powered, player, level, fruit, speed]);
+  }, [started, gameOver, direction, pendingDirection, speed, pellets, powered, player, fruit, ghostHouse]);
+
+  useEffect(() => {
+    const remaining = pellets.flat().filter((c) => c === "." || c === "o").length;
+
+    if (remaining > 0 && remaining % 25 === 0 && !fruit) {
+      const spawn = FRUIT_SPAWNS[(level + remaining) % FRUIT_SPAWNS.length];
+      setFruit({
+        x: spawn.x,
+        y: spawn.y,
+        value: 100 + level * 25,
+        ttl: 60,
+      });
+    }
+
+    if (remaining === 0 && started && !gameOver) {
+      nextLevel();
+    }
+  }, [pellets, fruit, level, started, gameOver]);
 
   useEffect(() => {
     if (gameOver) return;
