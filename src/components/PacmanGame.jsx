@@ -164,13 +164,13 @@ function PacmanGame({ onScoreChange, onGameOver }) {
 
   useEffect(() => {
     onScoreChange?.(score);
-  }, [score, onScoreChange]);
+  }, [score]);
 
   useEffect(() => {
     if (gameOver) {
       onGameOver?.(score);
     }
-  }, [gameOver, score, onGameOver]);
+  }, [gameOver, score]);
 
   useEffect(() => {
     if (score > highScore) {
@@ -181,6 +181,15 @@ function PacmanGame({ onScoreChange, onGameOver }) {
 
   useEffect(() => {
     function handleKeyDown(e) {
+      const tag = e.target.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        e.target.isContentEditable
+      ) {
+        return;
+      }
+
       const key = e.key.toLowerCase();
 
       if (key === "w") {

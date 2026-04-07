@@ -29,16 +29,25 @@ function WormGame({ onScoreChange, onGameOver }) {
 
   useEffect(() => {
     onScoreChange?.(score);
-  }, [score, onScoreChange]);
+  }, [score]);
 
   useEffect(() => {
     if (gameOver) {
       onGameOver?.(score);
     }
-  }, [gameOver, score, onGameOver]);
+  }, [gameOver, score]);
 
   useEffect(() => {
     function handleKeyDown(e) {
+      const tag = e.target.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        e.target.isContentEditable
+      ) {
+        return;
+      }
+
       const key = e.key.toLowerCase();
 
       if (key === "w" && direction !== "DOWN") {

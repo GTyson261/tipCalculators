@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import WormGame from "./components/WormGame.jsx";
 import GalaxyGame from "./components/GalaxyGame.jsx";
 import PacmanGame from "./components/PacmanGame.jsx";
 import YouTubeQueuePlayer from "./components/YouTubeQueuePlayer.jsx";
-import TipCalculator from "./components/TimeCalculator.jsx";
+import TipCalculator from "./components/TipCalculator.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 
 import heroImg from "./assets/hero.png";
@@ -129,7 +129,13 @@ function App() {
 
   useEffect(() => {
     function handleKeyDown(e) {
-      if (e.repeat) return;
+      const tag = e.target.tagName;
+      const isTypingField =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        e.target.isContentEditable;
+
+      if (isTypingField || e.repeat) return;
 
       if (e.key === "1") {
         switchGame(0);
@@ -200,30 +206,33 @@ function App() {
     });
   }
 
-  function saveScore(gameName, score) {
-    if (!Number.isFinite(score) || score <= 0) return;
+  const saveScore = useCallback(
+    (gameName, score) => {
+      if (!Number.isFinite(score) || score <= 0) return;
 
-    const safeName = playerName.trim() || "Player 1";
-    const entry = {
-      name: safeName,
-      score,
-      game: gameName,
-      at: Date.now(),
-    };
-
-    setLeaderboards((prev) => {
-      const nextEntries = [...prev[gameName], entry]
-        .sort((a, b) => b.score - a.score || b.at - a.at)
-        .slice(0, 5);
-
-      return {
-        ...prev,
-        [gameName]: nextEntries,
+      const safeName = playerName.trim() || "Player 1";
+      const entry = {
+        name: safeName,
+        score,
+        game: gameName,
+        at: Date.now(),
       };
-    });
 
-    setHistory((prev) => [entry, ...prev].slice(0, 20));
-  }
+      setLeaderboards((prev) => {
+        const nextEntries = [...prev[gameName], entry]
+          .sort((a, b) => b.score - a.score || b.at - a.at)
+          .slice(0, 5);
+
+        return {
+          ...prev,
+          [gameName]: nextEntries,
+        };
+      });
+
+      setHistory((prev) => [entry, ...prev].slice(0, 20));
+    },
+    [playerName]
+  );
 
   function clearHistory() {
     setHistory([]);
@@ -249,14 +258,45 @@ function App() {
     }, 220);
   }
 
+  const handleWormScoreChange = useCallback((score) => {
+    setLiveScores((prev) => ({ ...prev, worm: score }));
+  }, []);
+
+  const handleGalaxyScoreChange = useCallback((score) => {
+    setLiveScores((prev) => ({ ...prev, galaxy: score }));
+  }, []);
+
+  const handlePacmanScoreChange = useCallback((score) => {
+    setLiveScores((prev) => ({ ...prev, pacman: score }));
+  }, []);
+
+  const handleWormGameOver = useCallback(
+    (score) => {
+      saveScore("worm", score);
+    },
+    [saveScore]
+  );
+
+  const handleGalaxyGameOver = useCallback(
+    (score) => {
+      saveScore("galaxy", score);
+    },
+    [saveScore]
+  );
+
+  const handlePacmanGameOver = useCallback(
+    (score) => {
+      saveScore("pacman", score);
+    },
+    [saveScore]
+  );
+
   const renderedGame = (() => {
     if (currentGame.name === "worm") {
       return (
         <WormGame
-          onScoreChange={(score) =>
-            setLiveScores((prev) => ({ ...prev, worm: score }))
-          }
-          onGameOver={(score) => saveScore("worm", score)}
+          onScoreChange={handleWormScoreChange}
+          onGameOver={handleWormGameOver}
         />
       );
     }
@@ -264,20 +304,16 @@ function App() {
     if (currentGame.name === "galaxy") {
       return (
         <GalaxyGame
-          onScoreChange={(score) =>
-            setLiveScores((prev) => ({ ...prev, galaxy: score }))
-          }
-          onGameOver={(score) => saveScore("galaxy", score)}
+          onScoreChange={handleGalaxyScoreChange}
+          onGameOver={handleGalaxyGameOver}
         />
       );
     }
 
     return (
       <PacmanGame
-        onScoreChange={(score) =>
-          setLiveScores((prev) => ({ ...prev, pacman: score }))
-        }
-        onGameOver={(score) => saveScore("pacman", score)}
+        onScoreChange={handlePacmanScoreChange}
+        onGameOver={handlePacmanGameOver}
       />
     );
   })();

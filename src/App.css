@@ -919,15 +919,6 @@ body {
   border: 1px solid rgba(255,255,255,0.08);
 }
 
-.arcade-layout {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: 1.4fr 0.9fr;
-  gap: 24px;
-  align-items: start;
-}
-
 .side-stack {
   display: flex;
   flex-direction: column;
@@ -1046,43 +1037,6 @@ body {
   opacity: 0.6;
 }
 
-@media (max-width: 980px) {
-  .arcade-layout {
-    grid-template-columns: 1fr;
-  }
-}
-.transition {
-  position: fixed;
-  inset: 0;
-  opacity: 0;
-  background: rgba(0,0,0,0.5);
-  transition: 0.2s;
-}
-
-.transition.active {
-  opacity: 1;
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 20px;
-}
-
-.game {
-  padding: 20px;
-}
-
-.leaderboard {
-  padding: 20px;
-  background: rgba(255,255,255,0.08);
-  border-radius: 20px;
-}
-
-.shortcuts {
-  text-align: center;
-  margin: 10px;
-}
 /* ===== PLAYER + HISTORY + ANIMATIONS ===== */
 
 .player-bar {
@@ -1235,6 +1189,12 @@ body {
 .history-side small {
   opacity: 0.68;
   text-transform: capitalize;
+}
+
+@media (max-width: 980px) {
+  .arcade-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 700px) {

@@ -27,7 +27,7 @@ function GalaxyGame({ onScoreChange, onGameOver }) {
     if (ui.status === "gameover") {
       onGameOver?.(ui.score);
     }
-  }, [ui.score, ui.status, onScoreChange, onGameOver]);
+  }, [ui.score, ui.status]);
 
   useEffect(() => {
     const stars = Array.from({ length: 90 }, () => ({
@@ -381,15 +381,13 @@ function GalaxyGame({ onScoreChange, onGameOver }) {
         ctx.fillRect(b.x, b.y, b.w, b.h);
       });
 
-      ctx.fillStyle = "#ff8fab";
+      ctx.fillStyle = "#ff9f1c";
       state.enemyBullets.forEach((b) => {
         ctx.fillRect(b.x, b.y, b.w, b.h);
       });
 
       state.enemies.forEach((enemy) => {
-        if (enemy.alive) {
-          drawEnemy(ctx, enemy);
-        }
+        if (enemy.alive) drawEnemy(ctx, enemy);
       });
 
       state.explosions.forEach((p) => {
@@ -450,6 +448,15 @@ function GalaxyGame({ onScoreChange, onGameOver }) {
     }
 
     function handleKeyDown(e) {
+      const tag = e.target.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        e.target.isContentEditable
+      ) {
+        return;
+      }
+
       keysRef.current[e.key] = true;
 
       if (e.key === " " && !state.running && !state.gameOver) {
@@ -493,27 +500,28 @@ function GalaxyGame({ onScoreChange, onGameOver }) {
     }
   }
 
-  function handleRestart() {
-    if (gameRef.current?.resetGame) {
-      gameRef.current.resetGame();
-    }
-  }
-
   function handlePause() {
     if (gameRef.current?.togglePause) {
       gameRef.current.togglePause();
     }
   }
 
+  function handleRestart() {
+    if (gameRef.current?.resetGame) {
+      gameRef.current.resetGame();
+    }
+  }
+
   return (
     <div style={styles.wrapper}>
-      <h2 style={styles.title}>Galaxy Game 🌌</h2>
+      <h2 style={styles.title}>Galaxy Attack 🚀</h2>
 
       <div style={styles.hud}>
         <span>Score: {ui.score}</span>
+        <span>High: {ui.highScore}</span>
         <span>Lives: {ui.lives}</span>
         <span>Level: {ui.level}</span>
-        <span>High: {ui.highScore}</span>
+        <span>Status: {ui.status}</span>
       </div>
 
       <canvas

@@ -279,7 +279,6 @@ function YouTubeQueuePlayer() {
 
   function handleSkip() {
     if (safeQueue.length === 0) return;
-
     setCurrentIndex((prev) => (prev + 1) % safeQueue.length);
   }
 
@@ -365,16 +364,47 @@ function YouTubeQueuePlayer() {
           placeholder="Paste YouTube link"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          className="glass-input"
+          onPaste={(e) => {
+            const pasted = e.clipboardData.getData("text");
+            if (pasted) {
+              e.preventDefault();
+              setInput(pasted.trim());
+              setPlayerError("");
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onFocus={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
+            e.stopPropagation();
+
             if (e.key === "Enter") {
               addToQueue();
             }
           }}
+          className="glass-input"
         />
+
         <button className="neon-btn" onClick={addToQueue}>
           Add
         </button>
+
+        <button
+          className="neon-btn small-btn"
+          onClick={async () => {
+            try {
+              const text = await navigator.clipboard.readText();
+              if (text) {
+                setInput(text.trim());
+                setPlayerError("");
+              }
+            } catch {
+              alert("Clipboard paste was blocked. Try Command+V in the input.");
+            }
+          }}
+        >
+          Paste
+        </button>
+
         <button className="neon-btn small-btn" onClick={clearQueue}>
           Clear
         </button>
